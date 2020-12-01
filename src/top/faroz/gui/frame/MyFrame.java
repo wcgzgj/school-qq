@@ -20,7 +20,7 @@ public class MyFrame extends JFrame {
     private MyFrame() throws HeadlessException {
         super();
         this.setLayout(new BorderLayout());
-        this.setBounds(new Rectangle(30,30,400,400));
+        this.setBounds(new Rectangle(100,100,400,800));
         this.setTitle("19180319张健 校园qq");
         this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
