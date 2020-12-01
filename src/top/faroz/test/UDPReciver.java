@@ -1,5 +1,8 @@
 package top.faroz.test;
 
+import top.faroz.domain.Message;
+import top.faroz.util.ObjectUtil;
+
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -14,6 +17,16 @@ import java.net.SocketException;
  * @Version 1.0
  **/
 public class UDPReciver {
+
+    public static DatagramSocket ds;
+    static {
+        try {
+            ds = new DatagramSocket(9090);
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+    }
+
     public static void main(String[] args) throws IOException, InterruptedException {
 
         // for (int i = 0; i < 10; i++) {
@@ -21,7 +34,9 @@ public class UDPReciver {
         //     Thread.sleep(2000);
         //     send("服务器发送信息");
         // }
-        receive();
+        while (true) {
+            receive();
+        }
     }
 
     public static void send(String info) throws IOException {
@@ -35,13 +50,12 @@ public class UDPReciver {
     }
 
     public static void receive() throws IOException {
-        DatagramSocket ds = new DatagramSocket(9090);
         byte[] b = new byte[1024];
         DatagramPacket dp = new DatagramPacket(b, 0, b.length);
         ds.receive(dp);
 
         byte[] info = dp.getData();
-        String str = new String(info, 0, info.length);
-        System.out.println(str);
+        Message mess = (Message) ObjectUtil.byteToObject(info);
+        System.out.println(mess.getContext());
     }
 }

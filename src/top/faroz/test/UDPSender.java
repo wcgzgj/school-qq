@@ -1,6 +1,11 @@
 package top.faroz.test;
 
+import top.faroz.domain.Message;
+import top.faroz.util.ObjectUtil;
+
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.net.*;
 
 /**
@@ -18,12 +23,14 @@ public class UDPSender {
         //     Thread.sleep(2000);
         //     send("客户端发送信息");
         // }
-        send("客户端发送信息");
-
+        Message mes = new Message();
+        mes.setContext("哈哈哈哈");
+        send(mes);
     }
 
-    public static void send(String info) throws IOException {
-        byte[] bytes = info.getBytes();
+    public static void send(Message mess) throws IOException {
+        byte[] bytes = ObjectUtil.objectToByte(mess);
+
         //创建数据报
         DatagramPacket dp = new DatagramPacket(bytes, 0, bytes.length,
                 InetAddress.getByName("127.0.0.1"),
