@@ -4,7 +4,7 @@ import java.io.*;
 
 /**
  * @ClassName ObjectUtil
- * @Description TODO
+ * @Description 对象 字节数组互换
  * @Author FARO_Z
  * @Date 2020/12/1 下午5:48
  * @Version 1.0

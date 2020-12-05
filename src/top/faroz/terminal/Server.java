@@ -1,127 +1,190 @@
 package top.faroz.terminal;
 
-import com.sun.javafx.image.IntPixelGetter;
-import jdk.nashorn.internal.ir.IfNode;
-import sun.security.jca.GetInstance;
-import top.faroz.threadListener.ServerMessageListener;
-import top.faroz.util.ObjectUtil;
+import top.faroz.gui.frame.ServerFrame;
+import top.faroz.gui.panel.ServerPanel;
 import top.faroz.util.PropUtil;
 
+import javax.swing.*;
 import java.io.IOException;
-import java.net.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Properties;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.util.*;
 
 /**
  * @ClassName Server
- * @Description 服务端
+ * @Description TODO
  * @Author FARO_Z
- * @Date 2020/12/4 上午9:41
+ * @Date 2020/12/4 上午8:52
  * @Version 1.0
  **/
 public class Server {
-    //服务端ip
-    private static String server_ip=null;
-    //服务端端口号
-    private static int server_port=-1;
-    //服务端套接字
-    private static DatagramSocket server_socket = null;
-    //记录所有在线客户端
-    private List<String>clients=new ArrayList<String>();
-    //包大小，因为不会发送比较大的数据，所以，就定1024
-    private static final int package_size=1024;
-    //服务器单例
-    public static Server instance=new Server();
+    //服务器只有一个，使用单例模式
+    private JFrame frame;
+    private static Server instance;
+    private DatagramSocket socket;
+    private static int port;
+    private static final int buf_size = 1024;
+    private static Set<String> clients = new HashSet<>();
+
+    public static void iniServer(JFrame frame) {
+        if (instance==null) {
+            instance=new Server(frame);
+        }
+    }
 
     public static Server getInstance() {
         return instance;
     }
 
-    private Server() {
+    private Server(JFrame frame) {
+        this.frame=frame;
+    }
+
+    public void start() {
+        ServerFrame serverFrame = (ServerFrame) frame;
+        ServerPanel panel = (ServerPanel) serverFrame.getPanel();
+        JTextArea jta = panel.getJta();
+
+        //通过配置文件获取服务器端口号
         Properties prop = PropUtil.getProp();
-        server_ip=prop.getProperty("server_ip");
-        server_port=Integer.parseInt(prop.getProperty("server_port"));
+        port=Integer.parseInt(prop.getProperty("server_port"));
         try {
-            server_socket=new DatagramSocket(server_port);
-        } catch (SocketException e) {
-            e.printStackTrace();
+            socket = new DatagramSocket(port);
+            //GUI
+            String info = "服务开启[" + socket.getLocalSocketAddress() + "]，等待客户端连接中...";
+            System.out.println(info);
+            jta.append(info+"\n");
+
+            new MessageListener().start();
+        } catch (IOException e) {
+            // log
         }
     }
 
     /**
-     * 通过DatagramPackage获取String类型的消息
-     * @param dp
-     * @return
+     * 服务端消息监听线程
      */
-    public String getMsg(DatagramPacket dp) {
-        return (String)ObjectUtil.byteToObject(dp.getData());
+    class MessageListener extends Thread {
+        ServerFrame serverFrame = (ServerFrame) frame;
+        ServerPanel panel = (ServerPanel) serverFrame.getPanel();
+        JTextArea jta = panel.getJta();
+
+        @Override
+        public void run() {
+            try {
+                DatagramPacket packet;
+                String msg, client;
+                // 循环监听消息，后面可以考虑加上flag规避死循环
+                while (true) {
+                    packet = new DatagramPacket(new byte[buf_size], buf_size);
+                    msg = receiveMsg(packet); //获得数据包中的内容（已经转化为String）
+                    // 解析出client
+                    client = packet.getSocketAddress().toString();
+                    // 不能再用TCP那一套了，只能通过消息来确定上线与否
+                    // 因为UDP发了就不管了，所以默认只要发了消息就一定在线，下线只能通过心跳和主动退出
+
+                    jta.append(msg);
+                    if ("online".equals(msg)) {
+                        clients.add(client);
+
+                        String info = "客户端[" + client + "]连接成功，当前在线客户端" + clients.size() + "个";
+                        jta.append(info+"\n");
+
+                        sendMsg(0, "[系统消息]：欢迎" + client + "来到聊天室，当前共有" + clients.size() + "人在聊天", client);
+
+                        /**
+                         * 添加else if
+                         * 当客户端点击关闭按钮的时候
+                         * 向服务端发送特定信息
+                         * 服务端将发送该信息的客户端
+                         * 从客户端队列中删除
+                         */
+                    } else if("offline".equals(msg)) {
+                        //去除退出用户信息
+                        clients.remove(client);
+                        String info = client + "已退出聊天室，当前剩余" + clients.size() + "人";
+                        jta.append(info+"\n");
+                    } else {
+                        sendMsg(1, "[" + client + "]：" + msg, client);
+                    }
+
+                }
+            } catch (IOException e) {
+                // log
+            }
+        }
+    }
+
+    /**
+     * 解析出client的IP
+     *
+     * @param address socket地址，如：/127.0.0.1:9524
+     * @return IP
+     */
+    private String getIp(String address) {
+        String[] array = address.split(":");
+        String s = array[0];
+        return s.substring(1);
+    }
+
+    /**
+     * 解析出client的端口
+     *
+     * @param address socket地址，如：/127.0.0.1:9524
+     * @return 端口
+     */
+    private int getPort(String address) {
+        String[] array = address.split(":");
+        String s = array[1];
+        return Integer.valueOf(s);
     }
 
     /**
      * 发送消息
+     *
+     * @param type   消息类型（0、系统消息；1、用户消息）
+     * @param msg    消息内容
+     * @param client 客户端（用来作比对，是否跳过自己）
+     * @throws IOException
      */
-    public void sendMsg(String msg,String client,int type) {
-        //消息头
-        String msgHead = "[" + client + "]说:\n";
-        if (type!=0) msg=msgHead+"\t"+msg;//如果不是登陆信息，则添加消息头
-        try {
-            for (String s : clients) {
-                if (client.equals(s)) continue;//不用向自己发送消息
-                byte[] bytes = ObjectUtil.objectToByte(msg);
-                DatagramPacket dp = new DatagramPacket(bytes, bytes.length, InetAddress.getByName(getIP(s)),getPort(s));
-                try {
-                    server_socket.send(dp);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+    private void sendMsg(int type, String msg, String client) throws IOException {
+        if (type != 0) {
+            System.out.println("处理消息：" + msg);
+        }
+        DatagramPacket send_packet;
+        byte[] bytes;
+        //为所有客户端进行全局广播，后面也可以通过这边的筛选，实现点对点通信
+        for (String address : clients) {
+            if (type != 0 && client.equals(address)) {//这里是为了排除发送消息的客户端
+                continue;
             }
-        } catch (UnknownHostException e) {
-            e.printStackTrace();
+            // 将需要发送的消息，转换成byte数组
+            bytes = msg.getBytes();
+            // 组装发送包，需要指定：包内容、包长度、目标IP、目标端口
+            send_packet = new DatagramPacket(bytes, bytes.length, InetAddress.getByName(getIp(address)), getPort(address));
+            // 发送
+            socket.send(send_packet);
         }
     }
 
     /**
-     * 开启服务器，启动服务器监听
+     * 接收消息，由于receive是阻塞方法，所以可以直接将packet包当参数传进来
+     *
+     * @param packet 接收的数据包
+     * @return 消息内容
+     * @throws IOException
      */
-    public void startServer() {
-        /*
-        向服务器GUI中，发送服务器开启的消息
-         */
-        new ServerMessageListener(instance).start();
+    private String receiveMsg(DatagramPacket packet) throws IOException {
+        // 组装接收包，需要指定：包内容、包长度，这里的包内容只是先声明一个空数组，等待数据的填充
+        // DatagramPacket packet = new DatagramPacket(new byte[buf_size], buf_size);
+        socket.receive(packet);
+        // 包内容都是字节数组，需要转换成字符串
+        return new String(packet.getData(), packet.getOffset(), packet.getLength());
     }
 
-    /**
-     * 通过localSocketAddress获取ip
-     * 将 /127.0.0.1:9827 这样的消息，截取IP信息
-     * @param info
-     * @return
-     */
-    public String getIP(String info) {
-        String[] split = info.split(":");
-        return split[0].substring(1);
+    public JFrame getFrame() {
+        return frame;
     }
 
-    /**
-     * 通过localSocketAddress获取端口号
-     * 将 /127.0.0.1:9827 这样的消息，截取端口信息
-     * @param info
-     * @return
-     */
-    public int getPort(String info) {
-        String[] split = info.split(":");
-        return Integer.valueOf(split[1]);//将端口号转为int类型，发送
-    }
-
-    public static int getPackage_size() {
-        return package_size;
-    }
-
-    public static DatagramSocket getServer_socket() {
-        return server_socket;
-    }
-
-    public List<String> getClients() {
-        return clients;
-    }
 }

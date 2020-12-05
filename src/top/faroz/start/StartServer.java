@@ -1,5 +1,8 @@
 package top.faroz.start;
 
+import top.faroz.gui.frame.ServerFrame;
+import top.faroz.terminal.Server;
+
 /**
  * @ClassName StartServer
  * @Description TODO
@@ -9,6 +12,9 @@ package top.faroz.start;
  **/
 public class StartServer {
     public static void main(String[] args) {
-
+        ServerFrame serverFrame = new ServerFrame();
+        Server.iniServer(serverFrame);
+        Server.getInstance().getFrame().setVisible(true);
+        Server.getInstance().start();
     }
 }

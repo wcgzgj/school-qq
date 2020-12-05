@@ -2,6 +2,7 @@ package top.faroz.util;
 
 import jdk.nashorn.internal.objects.annotations.Property;
 
+import java.io.IOException;
 import java.util.Properties;
 
 /**
@@ -12,8 +13,18 @@ import java.util.Properties;
  * @Version 1.0
  **/
 public class PropUtil {
+    /**
+     * 获取配置文件对象
+     * @return
+     */
     public static Properties getProp() {
-        // Property prop = new Property();
-        return null;
+        String f = "src/data.properties";
+        Properties props = new Properties();
+        try {
+            props.load(new java.io.FileInputStream(f));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return props;
     }
 }
